@@ -1,0 +1,116 @@
+OBJECT Modification "Doc. - Move to Company"(Codeunit 6085758)
+{
+  OBJECT-PROPERTIES
+  {
+    Date=07.07.19;
+    Time=12:00:00;
+    Version List=DCW13.70.00.5.00.07,CKLADV1.00;
+  }
+  PROPERTIES
+  {
+    Target="Doc. - Move to Company"(Codeunit 6085758);
+  }
+  CHANGES
+  {
+    { Insertion         ;Target=IdentifyTargetCompany(PROCEDURE 1160040005);
+                         InsertAfter=i(Variable 1160040011);
+                         ChangedElements=VariableCollection
+                         {
+                           "--CKLADV--"@100000000 : Integer;
+                           CompanyBuffer@100000001 : TEMPORARY Record 2000000006;
+                           SearchWordFound@100000002 : Boolean;
+                           FoundCompany@100000003 : Text[50];
+                           MoreFoundCompanies@100000004 : Boolean;
+                         }
+                          }
+    { CodeModification  ;OriginalCode=BEGIN
+                                        DCSetup.GET;
+
+                                        DocWord.SETRANGE("Document No.",Document."No.");
+                                        #4..19
+
+                                        ReplaceSymbolText := DELCHR(FullSymbolText,'=',KeepSymbolText) + ' ';
+
+                                        DocWord.FINDSET(FALSE,FALSE);
+                                        REPEAT
+                                          IF IdentificationTextHasSymbol THEN
+                                        #26..31
+                                        CompIdentText.SETCURRENTKEY("Identification Text Length");
+                                        CompIdentText.ASCENDING(FALSE);
+
+                                        IF CompIdentText.FINDFIRST THEN
+                                          REPEAT
+                                            IF BigString.IndexOf(UPPERCASE(DELCHR(CompIdentText."Identification Text",'=',ReplaceSymbolText))) <> -1 THEN
+                                              IF Company.GET(CompIdentText."Company Name") THEN
+                                                EXIT(Company.Name);
+                                          UNTIL CompIdentText.NEXT = 0;
+
+                                        IF DocCat."Document with UIC" = DocCat."Document with UIC"::"Import as UIC document" THEN
+                                          EXIT('')
+                                        ELSE
+                                          EXIT(COMPANYNAME);
+                                      END;
+
+                         ModifiedCode=BEGIN
+                                        #1..22
+                                        // CKLADV Example of limiting the range where the search words are looked for >>>
+                                        DocWord.SETRANGE(Top,1000,1500);
+                                        DocWord.SETRANGE(Bottom,1020,15020);
+                                        DocWord.SETRANGE(Left,100,500);
+                                        DocWord.SETRANGE(Right,120,620);
+                                        // CKLADV Example of limiting the range where the search words are looked for <<<
+                                        #23..34
+                                        // CKLADV >>>
+                                        // ORIGINAL >>>
+                                        {IF CompIdentText.FINDFIRST THEN
+                                        #36..40
+                                        }
+                                        // ORIGINAL <<<
+
+                                        // MODIFIED >>>
+                                        // 1. Write all configured companies into buffer
+                                        IF CompIdentText.FINDFIRST THEN
+                                          REPEAT
+                                            IF NOT CompanyBuffer.GET(CompIdentText."Company Name") THEN BEGIN
+                                              CompanyBuffer.Name := CompIdentText."Company Name";
+                                              CompanyBuffer.INSERT;
+                                            END;
+                                          UNTIL CompIdentText.NEXT = 0;
+
+                                        // 2. iterate through all companies and check if ALL search words have been found
+                                        IF CompanyBuffer.FINDFIRST THEN
+                                          REPEAT
+                                            CompIdentText.SETRANGE("Company Name",CompanyBuffer.Name);
+                                            IF CompIdentText.FINDFIRST  THEN
+                                            REPEAT
+                                              SearchWordFound := BigString.IndexOf(UPPERCASE(DELCHR(CompIdentText."Identification Text",'=',ReplaceSymbolText))) <> -1;
+                                            UNTIL (CompIdentText.NEXT = 0) OR (NOT SearchWordFound);  // direkt aussteigen, wenn keine Úbereinstimmung bei einem Suchbegriff
+
+                                            IF SearchWordFound THEN
+                                              IF FoundCompany = '' THEN
+                                                FoundCompany := CompanyBuffer.Name
+                                              ELSE
+                                                MoreFoundCompanies := TRUE;
+                                          UNTIL (CompanyBuffer.NEXT = 0) OR (MoreFoundCompanies);
+
+                                          IF (FoundCompany <> '') AND (NOT MoreFoundCompanies) THEN
+                                            EXIT(FoundCompany);
+                                        // MODIFIED <<<
+                                        // CKLADV <<<
+                                        #41..45
+                                      END;
+
+                         Target=IdentifyTargetCompany(PROCEDURE 1160040005) }
+    { PropertyModification;
+                         Property=Version List;
+                         OriginalValue=DCW13.70.00.5.00.07;
+                         ModifiedValue=DCW13.70.00.5.00.07,CKLADV1.00 }
+  }
+  CODE
+  {
+
+    BEGIN
+    END.
+  }
+}
+

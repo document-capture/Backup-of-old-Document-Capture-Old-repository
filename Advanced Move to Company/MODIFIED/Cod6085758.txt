@@ -2,10 +2,9 @@ OBJECT Codeunit 6085758 Doc. - Move to Company
 {
   OBJECT-PROPERTIES
   {
-    Date=04.12.17;
+    Date=07.07.19;
     Time=12:00:00;
-    Modified=Yes;
-    Version List=DCW13.70.00.4.50,CKL001;
+    Version List=DCW13.70.00.5.00.07,CKLADV1.00;
   }
   PROPERTIES
   {
@@ -28,7 +27,7 @@ OBJECT Codeunit 6085758 Doc. - Move to Company
       Text007@1160040005 : TextConst 'DEU=%1 auf %2 muss in beiden Mandaten gleich sein.;ENU=%1 on the %2 must be the same in both companies.';
       Text008@1160040001 : TextConst 'DEU=[Unbekannter Mandant];ENU=[Unidentified Company]';
       Text009@1160040006 : TextConst 'DEU=%1 Dokument(e) wurde zu den Dokumenten ohne Mandant (UIC) verschoben.;ENU=%1 document(s) were moved to documents with unidentified company.';
-      Text010@1160040007 : TextConst 'DEU=Dokument %1 konnte nicht nach %2 verschoben werden, da eine oder mehrere Dateien nicht an den neuen Speicherort verschoben werden konnten.;ENU=Document %1 could not be moved to %2 as one or more files couldn+t be moved to the new location.';
+      Text010@1160040007 : TextConst 'DEU=Dokument %1 konnte nicht nach %2 verschoben werden, da eine oder mehrere Dateien nicht an den neuen Speicherort verschoben werden konnten.;ENU=Document %1 could not be moved to %2 as one or more files couldn…t be moved to the new location.';
 
     PROCEDURE SelectCompanyAndMove@1160040001(VAR Document@1160040000 : Record 6085590);
     VAR
@@ -85,11 +84,11 @@ OBJECT Codeunit 6085758 Doc. - Move to Company
       KeepSymbolText@1160040012 : Text[10];
       IdentificationTextHasSymbol@1160040006 : Boolean;
       i@1160040011 : Integer;
-      "//ckl"@1000000002 : Integer;
-      lCompanyBuffer@1000000001 : TEMPORARY Record 2000000006;
-      lFound@1000000000 : Boolean;
-      lMoreThanOneCombination@1000000003 : Boolean;
-      lValidCombinationCompany@1000000004 : Text[30];
+      "--CKLADV--"@100000000 : Integer;
+      CompanyBuffer@100000001 : TEMPORARY Record 2000000006;
+      SearchWordFound@100000002 : Boolean;
+      FoundCompany@100000003 : Text[50];
+      MoreFoundCompanies@100000004 : Boolean;
     BEGIN
       DCSetup.GET;
 
@@ -113,6 +112,12 @@ OBJECT Codeunit 6085758 Doc. - Move to Company
 
       ReplaceSymbolText := DELCHR(FullSymbolText,'=',KeepSymbolText) + ' ';
 
+      // CKLADV Example of limiting the range where the search words are looked for >>>
+      DocWord.SETRANGE(Top,1000,1500);
+      DocWord.SETRANGE(Bottom,1020,15020);
+      DocWord.SETRANGE(Left,100,500);
+      DocWord.SETRANGE(Right,120,620);
+      // CKLADV Example of limiting the range where the search words are looked for <<<
       DocWord.FINDSET(FALSE,FALSE);
       REPEAT
         IF IdentificationTextHasSymbol THEN
@@ -125,44 +130,47 @@ OBJECT Codeunit 6085758 Doc. - Move to Company
       CompIdentText.SETCURRENTKEY("Identification Text Length");
       CompIdentText.ASCENDING(FALSE);
 
-      {
-      //ckl/sr/04.12.17 OLD>>>
-      IF CompIdentText.FINDFIRST THEN
+      // CKLADV >>>
+      // ORIGINAL >>>
+      {IF CompIdentText.FINDFIRST THEN
         REPEAT
           IF BigString.IndexOf(UPPERCASE(DELCHR(CompIdentText."Identification Text",'=',ReplaceSymbolText))) <> -1 THEN
             IF Company.GET(CompIdentText."Company Name") THEN
               EXIT(Company.Name);
         UNTIL CompIdentText.NEXT = 0;
-      //ckl/sr/04.12.17 OLD<<<
       }
-      // 1. Alle Mandanten in Puffer schreiben
+      // ORIGINAL <<<
+
+      // MODIFIED >>>
+      // 1. Write all configured companies into buffer
       IF CompIdentText.FINDFIRST THEN
         REPEAT
-          IF NOT lCompanyBuffer.GET(CompIdentText."Company Name") THEN BEGIN
-            lCompanyBuffer.Name := CompIdentText."Company Name";
-            lCompanyBuffer.INSERT;
+          IF NOT CompanyBuffer.GET(CompIdentText."Company Name") THEN BEGIN
+            CompanyBuffer.Name := CompIdentText."Company Name";
+            CompanyBuffer.INSERT;
           END;
         UNTIL CompIdentText.NEXT = 0;
 
-      // 2. Mandanten iterieren und PrÅfen, ob pro Mandante alle Suchwîrter gefunden werden
-      IF lCompanyBuffer.FINDFIRST THEN
+      // 2. iterate through all companies and check if ALL search words have been found
+      IF CompanyBuffer.FINDFIRST THEN
         REPEAT
-          CompIdentText.SETRANGE("Company Name",lCompanyBuffer.Name);
+          CompIdentText.SETRANGE("Company Name",CompanyBuffer.Name);
           IF CompIdentText.FINDFIRST  THEN
           REPEAT
-            lFound := BigString.IndexOf(UPPERCASE(DELCHR(CompIdentText."Identification Text",'=',ReplaceSymbolText))) <> -1;
-          UNTIL (CompIdentText.NEXT = 0) OR (NOT lFound);  // direkt aussteigen, wenn keine öbereinstimmung bei einem Suchbegriff
+            SearchWordFound := BigString.IndexOf(UPPERCASE(DELCHR(CompIdentText."Identification Text",'=',ReplaceSymbolText))) <> -1;
+          UNTIL (CompIdentText.NEXT = 0) OR (NOT SearchWordFound);  // direkt aussteigen, wenn keine ⁄bereinstimmung bei einem Suchbegriff
 
-          IF lFound THEN
-            IF lValidCombinationCompany = '' THEN
-              lValidCombinationCompany := lCompanyBuffer.Name
+          IF SearchWordFound THEN
+            IF FoundCompany = '' THEN
+              FoundCompany := CompanyBuffer.Name
             ELSE
-              lMoreThanOneCombination := TRUE;
-        UNTIL (lCompanyBuffer.NEXT = 0) OR (lMoreThanOneCombination);
+              MoreFoundCompanies := TRUE;
+        UNTIL (CompanyBuffer.NEXT = 0) OR (MoreFoundCompanies);
 
-        IF (lValidCombinationCompany <> '') AND (NOT lMoreThanOneCombination) THEN
-          EXIT(lValidCombinationCompany);
-      //ckl/sr/04.12.17 <<<
+        IF (FoundCompany <> '') AND (NOT MoreFoundCompanies) THEN
+          EXIT(FoundCompany);
+      // MODIFIED <<<
+      // CKLADV <<<
 
       IF DocCat."Document with UIC" = DocCat."Document with UIC"::"Import as UIC document" THEN
         EXIT('')
@@ -185,10 +193,12 @@ OBJECT Codeunit 6085758 Doc. - Move to Company
       NewSetup.CHANGECOMPANY(NewCompName);
       NewSetup.GET;
 
-      IF NewSetup."Document Nos." = '' THEN
-        ERROR(Text003,NewSetup.FIELDCAPTION("Document Nos."),NewSetup.TABLECAPTION,NewCompName);
-      IF NewSetup."Archive File Path" = '' THEN
-        ERROR(Text003,NewSetup.FIELDCAPTION("Archive File Path"),NewSetup.TABLECAPTION,NewCompName);
+      IF NewSetup."Document Storage Type" = NewSetup."Document Storage Type"::"File System" THEN BEGIN
+        IF NewSetup."Document Nos." = '' THEN
+          ERROR(Text003,NewSetup.FIELDCAPTION("Document Nos."),NewSetup.TABLECAPTION,NewCompName);
+        IF NewSetup."Archive File Path" = '' THEN
+          ERROR(Text003,NewSetup.FIELDCAPTION("Archive File Path"),NewSetup.TABLECAPTION,NewCompName);
+      END;
 
       IF Document.FINDSET THEN
         REPEAT
@@ -219,7 +229,10 @@ OBJECT Codeunit 6085758 Doc. - Move to Company
       IF NewDocCat."Archive E-mails on Document" <> OldDocCat."Archive E-mails on Document" THEN
         ERROR(Text007,NewDocCat.FIELDCAPTION("Archive E-mails on Document"),NewDocCat.TABLECAPTION);
 
-      IF (NewDocCat."Archive E-mails on Document") AND (NewSetup."Archive File Path" = '') THEN
+      IF (NewDocCat."Archive E-mails on Document") AND
+        (NewSetup."Document Storage Type" = NewSetup."Document Storage Type"::"File System") AND
+        (NewSetup."Archive File Path" = '')
+      THEN
         ERROR(Text003,NewSetup.FIELDCAPTION("Archive File Path"),NewSetup.TABLECAPTION,NewCompName);
 
       NewDocument.SetCurrentCompany(NewCompName);
@@ -383,7 +396,10 @@ OBJECT Codeunit 6085758 Doc. - Move to Company
       DocCat.CHANGECOMPANY(NewCompName);
       DocCat.GET(DocumentUIC."Document Category Code");
 
-      IF (DocCat."Archive E-mails on Document") AND (DCSetup."Archive File Path" = '') THEN
+      IF (DocCat."Archive E-mails on Document") AND
+        (DCSetup."Document Storage Type" = DCSetup."Document Storage Type"::"File System") AND
+        (DCSetup."Archive File Path" = '')
+      THEN
         ERROR(Text003,DCSetup.FIELDCAPTION("Archive File Path"),DCSetup.TABLECAPTION,NewCompName);
 
       NewDocument.SetCurrentCompany(NewCompName);
@@ -442,8 +458,7 @@ OBJECT Codeunit 6085758 Doc. - Move to Company
       COMMIT;
 
       IF NewCompName = COMPANYNAME THEN BEGIN
-        IF DocCat."Process New Files Automatic" THEN
-          CaptureEngine.CaptureDocument(NewDocument);
+        CaptureEngine.CaptureDocument(NewDocument);
 
         IF DocCat."Register Documents Automatic." THEN
           IF NewDocument.FIND('=') THEN BEGIN
@@ -556,40 +571,61 @@ OBJECT Codeunit 6085758 Doc. - Move to Company
 
     PROCEDURE CopyFiles@1160040018(VAR OldDocument@1160040001 : Record 6085590;VAR NewDocument@1160040000 : Record 6085590;DocCat@1160040002 : Record 6085575) Succes : Boolean;
     VAR
+      TempOldPdfFile@1000 : TEMPORARY Record 6085608;
+      TempOldTiffFile@1001 : TEMPORARY Record 6085608;
+      TempOldEmailFile@1002 : TEMPORARY Record 6085608;
       EmptyGuid@1160040003 : GUID;
     BEGIN
-      Succes := NewDocument.SetTiffFile(OldDocument.GetTiffServerFileName) AND
-        NewDocument.SetPdfFile(OldDocument.GetPdfServerFileName);
+      OldDocument.GetPdfFile(TempOldPdfFile);
+      OldDocument.GetTiffFile(TempOldTiffFile);
+      OldDocument.GetEmailFile(TempOldEmailFile);
+
+      Succes := NewDocument.SetTiffFile(TempOldTiffFile) AND
+        NewDocument.SetPdfFile(TempOldPdfFile);
 
       IF Succes THEN
         IF (DocCat."Archive E-mails on Document") AND (OldDocument."E-Mail GUID" <> EmptyGuid) THEN
-          IF NOT NewDocument.SetEmailFile(OldDocument.GetEMailServerFileName) THEN
+          IF NOT NewDocument.SetEmailFile(TempOldEmailFile) THEN
             EXIT(FALSE);
     END;
 
     PROCEDURE CopyUICFilesToCompany@1160040016(VAR DocumentUIC@1160040000 : Record 6085601;VAR NewDocument@1160040001 : Record 6085590;DocCat@1160040002 : Record 6085575) Succes : Boolean;
     VAR
+      TempPdfFile@1002 : TEMPORARY Record 6085608;
+      TempTiffFile@1001 : TEMPORARY Record 6085608;
+      TempEmailFile@1000 : TEMPORARY Record 6085608;
       EmptyGuid@1160040003 : GUID;
     BEGIN
-      Succes := NewDocument.SetTiffFile(DocumentUIC.GetTiffServerFileName) AND
-        NewDocument.SetPdfFile(DocumentUIC.GetPdfServerFileName);
+      DocumentUIC.GetTiffFile(TempTiffFile);
+      DocumentUIC.GetPdfFile(TempPdfFile);
+      DocumentUIC.GetEmailFile(TempEmailFile);
+
+      Succes := NewDocument.SetTiffFile(TempTiffFile) AND
+        NewDocument.SetPdfFile(TempPdfFile);
 
       IF Succes THEN
         IF (DocCat."Archive E-mails on Document") AND (DocumentUIC."E-Mail GUID" <> EmptyGuid) THEN
-          IF NOT NewDocument.SetEmailFile(DocumentUIC.GetEMailServerFileName) THEN
+          IF NOT NewDocument.SetEmailFile(TempEmailFile) THEN
             EXIT(FALSE);
     END;
 
     PROCEDURE CopyCompanyFilesToUIC@1160040017(VAR Document@1160040001 : Record 6085590;VAR NewDocumentUIC@1160040002 : Record 6085601;DocCat@1160040000 : Record 6085575) Succes : Boolean;
     VAR
+      TempPdfFile@6085575 : TEMPORARY Record 6085608;
+      TempTiffFile@6085574 : TEMPORARY Record 6085608;
+      TempEmailFile@6085573 : TEMPORARY Record 6085608;
       EmptyGuid@1160040003 : GUID;
     BEGIN
-      Succes := NewDocumentUIC.SetTiffFile(Document.GetTiffServerFileName) AND
-        NewDocumentUIC.SetPdfFile(Document.GetPdfServerFileName);
+      Document.GetTiffFile(TempTiffFile);
+      Document.GetPdfFile(TempPdfFile);
+      Document.GetEmailFile(TempEmailFile);
+
+      Succes := NewDocumentUIC.SetTiffFile(TempTiffFile) AND
+        NewDocumentUIC.SetPdfFile(TempPdfFile);
 
       IF Succes THEN
         IF (DocCat."Archive E-mails on Document") AND (Document."E-Mail GUID" <> EmptyGuid) THEN
-          IF NOT NewDocumentUIC.SetEmailFile(NewDocumentUIC.GetEMailServerFileName) THEN
+          IF NOT NewDocumentUIC.SetEmailFile(TempEmailFile) THEN
             EXIT(FALSE);
     END;
 
