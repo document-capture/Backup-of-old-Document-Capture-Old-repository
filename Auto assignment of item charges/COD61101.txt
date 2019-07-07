@@ -1,0 +1,111 @@
+OBJECT Codeunit 61101 CDC Adv. Item Charge Assgnmnt.
+{
+  OBJECT-PROPERTIES
+  {
+    Date=07.07.19;
+    Time=12:00:00;
+    Version List=CDCADV110.00;
+  }
+  PROPERTIES
+  {
+    TableNo=6085590;
+    Permissions=TableData 6085700=rimd;
+    OnRun=BEGIN
+            // Run through the standard Register codeunit
+            CODEUNIT.RUN(CODEUNIT::"Purch. Doc. - Register",Rec);
+
+            AutoAssignmentOfItemCharges(Rec);
+          END;
+
+  }
+  CODE
+  {
+
+    LOCAL PROCEDURE AutoAssignmentOfItemCharges@100000008(VAR DCDocument@100000000 : Record 6085590);
+    VAR
+      AssignItemChargePurch@100000002 : Codeunit 5805;
+      PurchaseLine@100000003 : Record 39;
+      PurchaseHeader@100000004 : Record 38;
+      Currency@100000005 : Record 4;
+      ItemChargeAssgntLineAmt@100000006 : Decimal;
+      ItemChargeAssgntPurch@100000008 : Record 5805;
+      AssignableQty@100000007 : Decimal;
+      TotalQtyToAssign@100000009 : Decimal;
+      TotalAmountToAssign@100000010 : Decimal;
+    BEGIN
+      PurchaseLine.SETRANGE("Document Type", PurchaseLine."Document Type"::Invoice);
+      PurchaseLine.SETRANGE("Document No.", DCDocument."Created Doc. ID");
+      PurchaseLine.SETRANGE(Type,PurchaseLine.Type::"Charge (Item)");
+      PurchaseLine.SETFILTER(Quantity,'<>%1',0);
+      IF PurchaseLine.ISEMPTY THEN
+        EXIT;
+
+      // Iterate through each PurchaseLine
+      IF PurchaseLine.FINDSET THEN
+        REPEAT
+          // Code from T39_ShowItemChargeAssgnt >>>
+          // Create Item Charge Assgnnt Purch lines
+          PurchaseLine.TESTFIELD("No.");
+          PurchaseLine.TESTFIELD(Quantity);
+
+          PurchaseHeader.GET(PurchaseHeader."Document Type"::Invoice,DCDocument."Created Doc. ID");
+
+          IF PurchaseHeader."Currency Code" = '' THEN
+            Currency.InitRoundingPrecision
+          ELSE
+            Currency.GET(PurchaseHeader."Currency Code");
+          IF (PurchaseLine."Inv. Discount Amount" = 0) AND
+             (PurchaseLine."Line Discount Amount" = 0) AND
+             (NOT PurchaseHeader."Prices Including VAT")
+          THEN
+            ItemChargeAssgntLineAmt := PurchaseLine."Line Amount"
+          ELSE
+            IF PurchaseHeader."Prices Including VAT" THEN
+              ItemChargeAssgntLineAmt :=
+                ROUND((PurchaseLine."Line Amount" - PurchaseLine."Inv. Discount Amount") / (1 + PurchaseLine."VAT %" / 100),
+                  Currency."Amount Rounding Precision")
+            ELSE
+              ItemChargeAssgntLineAmt := PurchaseLine."Line Amount" - PurchaseLine."Inv. Discount Amount";
+
+          ItemChargeAssgntPurch.RESET;
+          ItemChargeAssgntPurch.SETRANGE("Document Type",PurchaseLine."Document Type");
+          ItemChargeAssgntPurch.SETRANGE("Document No.",PurchaseLine."Document No.");
+          ItemChargeAssgntPurch.SETRANGE("Document Line No.",PurchaseLine."Line No.");
+          ItemChargeAssgntPurch.SETRANGE("Item Charge No.",PurchaseLine."No.");
+          IF NOT ItemChargeAssgntPurch.FINDLAST THEN BEGIN
+            ItemChargeAssgntPurch."Document Type" := PurchaseLine."Document Type";
+            ItemChargeAssgntPurch."Document No." := PurchaseLine."Document No.";
+            ItemChargeAssgntPurch."Document Line No." := PurchaseLine."Line No.";
+            ItemChargeAssgntPurch."Item Charge No." := PurchaseLine."No.";
+            ItemChargeAssgntPurch."Unit Cost" :=
+              ROUND(ItemChargeAssgntLineAmt / PurchaseLine.Quantity,
+                Currency."Unit-Amount Rounding Precision");
+          END;
+
+          ItemChargeAssgntLineAmt :=
+            ROUND(
+              ItemChargeAssgntLineAmt * (PurchaseLine."Qty. to Invoice" / PurchaseLine.Quantity),
+              Currency."Amount Rounding Precision");
+
+          IF PurchaseLine."Document Type" IN [PurchaseLine."Document Type"::"Return Order",PurchaseLine."Document Type"::"Credit Memo"] THEN
+            AssignItemChargePurch.CreateDocChargeAssgnt(ItemChargeAssgntPurch,PurchaseLine."Return Shipment No.")
+          ELSE
+            AssignItemChargePurch.CreateDocChargeAssgnt(ItemChargeAssgntPurch,PurchaseLine."Receipt No.");
+          CLEAR(AssignItemChargePurch);
+          COMMIT;
+          // Code from T39_ShowItemChargeAssgnt <<<
+
+
+          //1: equally
+          //2: by amount
+          //3: by weight
+          //4: by volume
+          AssignItemChargePurch.SuggestAssgnt2(PurchaseLine,PurchaseLine.Quantity,PurchaseLine."Line Amount",{select the correct assigngment option} 2);
+        UNTIL PurchaseLine.NEXT = 0;
+    END;
+
+    BEGIN
+    END.
+  }
+}
+
