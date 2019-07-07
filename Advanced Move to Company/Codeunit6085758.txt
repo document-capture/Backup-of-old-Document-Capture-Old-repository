@@ -1,0 +1,600 @@
+OBJECT Codeunit 6085758 Doc. - Move to Company
+{
+  OBJECT-PROPERTIES
+  {
+    Date=04.12.17;
+    Time=12:00:00;
+    Modified=Yes;
+    Version List=DCW13.70.00.4.50,CKL001;
+  }
+  PROPERTIES
+  {
+    TableNo=6085590;
+    Permissions=TableData 309=rm;
+    OnRun=BEGIN
+            SelectCompanyAndMove(Rec)
+          END;
+
+  }
+  CODE
+  {
+    VAR
+      Text001@1160040004 : TextConst 'DEU=Grî·ere Nummern als %1 kînnen aus der Nummernserie &2 nicht mehr zugeweisen werden.;ENU=You cannot assign numbers greater than %1 from the number series %2.';
+      Text002@1160040003 : TextConst 'DEU=Die Nummer %1 kann maximal auf 20 Stellen erweitert werden.;ENU=The number %1 cannot be extended to more than 20 characters.';
+      Text003@1160040002 : TextConst 'DEU=%1 auf %2 darf in Mandant %3 nicht leer sein.;ENU=%1 on the %2 cannot be empty in company %3.';
+      Text004@1160040009 : TextConst 'DEU=%1 wird fÅr %2 nicht unterstÅtzt, wenn Belege zwischen Mandanten kopiert werden.;ENU=%1 not supported for %2 when copying documents between companies.';
+      Text005@1160040010 : TextConst 'DEU=Nur ein %1 wird unterstÅtzt, wenn Belege zwischen Mandanten kopiert werden.;ENU=Only one %1 is supported when copying documents between companies.';
+      Text006@1160040000 : TextConst 'DEU=%1 Beleg(e) nach Mandant %2 verschoben.;ENU=%1 document(s) were moved to company %2.';
+      Text007@1160040005 : TextConst 'DEU=%1 auf %2 muss in beiden Mandaten gleich sein.;ENU=%1 on the %2 must be the same in both companies.';
+      Text008@1160040001 : TextConst 'DEU=[Unbekannter Mandant];ENU=[Unidentified Company]';
+      Text009@1160040006 : TextConst 'DEU=%1 Dokument(e) wurde zu den Dokumenten ohne Mandant (UIC) verschoben.;ENU=%1 document(s) were moved to documents with unidentified company.';
+      Text010@1160040007 : TextConst 'DEU=Dokument %1 konnte nicht nach %2 verschoben werden, da eine oder mehrere Dateien nicht an den neuen Speicherort verschoben werden konnten.;ENU=Document %1 could not be moved to %2 as one or more files couldn+t be moved to the new location.';
+
+    PROCEDURE SelectCompanyAndMove@1160040001(VAR Document@1160040000 : Record 6085590);
+    VAR
+      DCSetup@1160040005 : Record 6085573;
+      Company@1160040002 : Record 2000000006;
+      MoveToCompany@1160040003 : TEMPORARY Record 6085703;
+      DocCat@1160040004 : Record 6085575;
+      NoOfDocuments@1160040001 : Integer;
+    BEGIN
+      DCSetup.GET;
+      DCSetup.IsUICSetupConsistent(TRUE);
+      Document.FINDSET;
+      DocCat.GET(Document."Document Category Code");
+
+      IF DCSetup."Use UIC Documents" THEN BEGIN
+        MoveToCompany.Type := MoveToCompany.Type::UIC;
+        MoveToCompany.Name := Text008;
+        MoveToCompany.INSERT;
+      END;
+
+      Company.SETFILTER(Name,'<>%1',COMPANYNAME);
+      IF Company.FINDSET THEN
+        REPEAT
+          MoveToCompany.Type := MoveToCompany.Type::Company;
+          MoveToCompany.Name := Company.Name;
+          MoveToCompany.INSERT;
+        UNTIL Company.NEXT = 0;
+      IF MoveToCompany.FINDFIRST THEN;
+
+      IF PAGE.RUNMODAL(PAGE::"Move to Company",MoveToCompany) <> ACTION::LookupOK THEN
+        EXIT;
+
+      NoOfDocuments := Document.COUNT;
+
+      IF MoveToCompany.Type = MoveToCompany.Type::Company THEN BEGIN
+        MoveDocuments(Document,MoveToCompany.Name);
+        MESSAGE(Text006,NoOfDocuments,MoveToCompany.Name);
+      END ELSE BEGIN
+        MoveUICDocuments(Document);
+        MESSAGE(Text009,NoOfDocuments);
+      END;
+    END;
+
+    PROCEDURE IdentifyTargetCompany@1160040005(Document@1160040000 : Record 6085590;DocCat@1160040005 : Record 6085575) : Text[250];
+    VAR
+      DCSetup@1160040008 : Record 6085573;
+      Company@1160040001 : Record 2000000006;
+      CompIdentText@1160040002 : Record 6085611;
+      DocWord@1160040004 : Record 6085592;
+      BigString@1160040003 : Codeunit 6085587;
+      SearchText@1160040007 : Text[150];
+      FullSymbolText@1160040009 : Text[10];
+      ReplaceSymbolText@1160040010 : Text[20];
+      KeepSymbolText@1160040012 : Text[10];
+      IdentificationTextHasSymbol@1160040006 : Boolean;
+      i@1160040011 : Integer;
+      "//ckl"@1000000002 : Integer;
+      lCompanyBuffer@1000000001 : TEMPORARY Record 2000000006;
+      lFound@1000000000 : Boolean;
+      lMoreThanOneCombination@1000000003 : Boolean;
+      lValidCombinationCompany@1000000004 : Text[30];
+    BEGIN
+      DCSetup.GET;
+
+      DocWord.SETRANGE("Document No.",Document."No.");
+      DocWord.SETRANGE("Page No.",1);
+
+      IF CompIdentText.ISEMPTY OR DocWord.ISEMPTY THEN
+        IF DocCat."Document with UIC" = DocCat."Document with UIC"::"Import as UIC document" THEN
+          EXIT('')
+        ELSE
+          EXIT(COMPANYNAME);
+
+      FullSymbolText := ',.-;:/\*+-';
+      IF CompIdentText.FINDSET THEN
+        REPEAT
+          FOR i := 1 TO STRLEN(FullSymbolText) DO
+            IF STRPOS(CompIdentText."Identification Text",FORMAT(FullSymbolText[i])) <> 0 THEN
+              IF STRPOS(KeepSymbolText,FORMAT(FullSymbolText[i])) = 0 THEN
+                KeepSymbolText := KeepSymbolText + FORMAT(FullSymbolText[i]);
+        UNTIL CompIdentText.NEXT = 0;
+
+      ReplaceSymbolText := DELCHR(FullSymbolText,'=',KeepSymbolText) + ' ';
+
+      DocWord.FINDSET(FALSE,FALSE);
+      REPEAT
+        IF IdentificationTextHasSymbol THEN
+          BigString.Append(UPPERCASE(DocWord.Word))
+        ELSE
+          BigString.Append(UPPERCASE(DELCHR(DocWord.Word,'=',ReplaceSymbolText)));
+      UNTIL DocWord.NEXT = 0;
+
+      CompIdentText.RESET;
+      CompIdentText.SETCURRENTKEY("Identification Text Length");
+      CompIdentText.ASCENDING(FALSE);
+
+      {
+      //ckl/sr/04.12.17 OLD>>>
+      IF CompIdentText.FINDFIRST THEN
+        REPEAT
+          IF BigString.IndexOf(UPPERCASE(DELCHR(CompIdentText."Identification Text",'=',ReplaceSymbolText))) <> -1 THEN
+            IF Company.GET(CompIdentText."Company Name") THEN
+              EXIT(Company.Name);
+        UNTIL CompIdentText.NEXT = 0;
+      //ckl/sr/04.12.17 OLD<<<
+      }
+      // 1. Alle Mandanten in Puffer schreiben
+      IF CompIdentText.FINDFIRST THEN
+        REPEAT
+          IF NOT lCompanyBuffer.GET(CompIdentText."Company Name") THEN BEGIN
+            lCompanyBuffer.Name := CompIdentText."Company Name";
+            lCompanyBuffer.INSERT;
+          END;
+        UNTIL CompIdentText.NEXT = 0;
+
+      // 2. Mandanten iterieren und PrÅfen, ob pro Mandante alle Suchwîrter gefunden werden
+      IF lCompanyBuffer.FINDFIRST THEN
+        REPEAT
+          CompIdentText.SETRANGE("Company Name",lCompanyBuffer.Name);
+          IF CompIdentText.FINDFIRST  THEN
+          REPEAT
+            lFound := BigString.IndexOf(UPPERCASE(DELCHR(CompIdentText."Identification Text",'=',ReplaceSymbolText))) <> -1;
+          UNTIL (CompIdentText.NEXT = 0) OR (NOT lFound);  // direkt aussteigen, wenn keine öbereinstimmung bei einem Suchbegriff
+
+          IF lFound THEN
+            IF lValidCombinationCompany = '' THEN
+              lValidCombinationCompany := lCompanyBuffer.Name
+            ELSE
+              lMoreThanOneCombination := TRUE;
+        UNTIL (lCompanyBuffer.NEXT = 0) OR (lMoreThanOneCombination);
+
+        IF (lValidCombinationCompany <> '') AND (NOT lMoreThanOneCombination) THEN
+          EXIT(lValidCombinationCompany);
+      //ckl/sr/04.12.17 <<<
+
+      IF DocCat."Document with UIC" = DocCat."Document with UIC"::"Import as UIC document" THEN
+        EXIT('')
+      ELSE
+        EXIT(COMPANYNAME);
+    END;
+
+    PROCEDURE MoveDocument@1160040007(Document@1160040000 : Record 6085590;NewCompName@1160040001 : Text[250]) : Boolean;
+    BEGIN
+      Document.SETRECFILTER;
+      MoveDocuments(Document,NewCompName);
+    END;
+
+    PROCEDURE MoveDocuments@1160040002(VAR Document@1160040002 : Record 6085590;NewCompName@1160040005 : Text[250]);
+    VAR
+      OldSetup@1160040004 : Record 6085573;
+      NewSetup@1160040003 : Record 6085573;
+    BEGIN
+      OldSetup.GET;
+      NewSetup.CHANGECOMPANY(NewCompName);
+      NewSetup.GET;
+
+      IF NewSetup."Document Nos." = '' THEN
+        ERROR(Text003,NewSetup.FIELDCAPTION("Document Nos."),NewSetup.TABLECAPTION,NewCompName);
+      IF NewSetup."Archive File Path" = '' THEN
+        ERROR(Text003,NewSetup.FIELDCAPTION("Archive File Path"),NewSetup.TABLECAPTION,NewCompName);
+
+      IF Document.FINDSET THEN
+        REPEAT
+          MoveDocument2(Document,NewSetup,NewCompName);
+        UNTIL Document.NEXT = 0;
+    END;
+
+    LOCAL PROCEDURE MoveDocument2@1160040000(VAR OldDocument@1160040011 : Record 6085590;VAR NewSetup@1160040008 : Record 6085573;NewCompName@1160040000 : Text[50]);
+    VAR
+      OldDocCat@1160040013 : Record 6085575;
+      NewDocCat@1160040002 : Record 6085575;
+      OldDocuments@1160040007 : Record 6085590;
+      NewDocument@1160040001 : Record 6085590;
+      OldDocPage@1160040003 : Record 6085591;
+      NewDocPage@1160040004 : Record 6085591;
+      OldDocWord@1160040005 : Record 6085592;
+      NewDocWord@1160040006 : Record 6085592;
+      OldDocCmtLine@1160040010 : Record 6085577;
+      NewDocCmtLine@1160040012 : Record 6085577;
+      EmptyGuid@1160040009 : GUID;
+    BEGIN
+      OldDocument.TESTFIELD("File Type",OldDocument."File Type"::OCR);
+      OldDocument.TESTFIELD(Status,OldDocument.Status::Open);
+
+      OldDocCat.GET(OldDocument."Document Category Code");
+      NewDocCat.CHANGECOMPANY(NewCompName);
+      NewDocCat.GET(OldDocument."Document Category Code");
+      IF NewDocCat."Archive E-mails on Document" <> OldDocCat."Archive E-mails on Document" THEN
+        ERROR(Text007,NewDocCat.FIELDCAPTION("Archive E-mails on Document"),NewDocCat.TABLECAPTION);
+
+      IF (NewDocCat."Archive E-mails on Document") AND (NewSetup."Archive File Path" = '') THEN
+        ERROR(Text003,NewSetup.FIELDCAPTION("Archive File Path"),NewSetup.TABLECAPTION,NewCompName);
+
+      NewDocument.SetCurrentCompany(NewCompName);
+      NewDocument.TRANSFERFIELDS(OldDocument,TRUE);
+      NewDocument."No." := GetNextDocNo(NewSetup,NewCompName);
+      NewDocument."Source Record ID Tree ID" := 0;
+      NewDocument."Source Record Table ID" := 0;
+      NewDocument."Source Record No." := '';
+      NewDocument."Source Record Name" := '';
+      NewDocument."Template No." := '';
+      NewDocument.INSERT(TRUE);
+
+      NewDocument."Imported by" := OldDocument."Imported by";
+      NewDocument."Imported Date-Time" := OldDocument."Imported Date-Time";
+      NewDocument."Import Day" := OldDocument."Import Day";
+      NewDocument."Import Month" := OldDocument."Import Month";
+      NewDocument."Import Year" := OldDocument."Import Year";
+      NewDocument.MODIFY;
+
+      OldDocPage.SETRANGE("Document No.",OldDocument."No.");
+      IF OldDocPage.FINDSET THEN
+        REPEAT
+          NewDocPage.CHANGECOMPANY(NewCompName);
+          NewDocPage := OldDocPage;
+          NewDocPage."Document No." := NewDocument."No.";
+          NewDocPage.INSERT;
+        UNTIL OldDocPage.NEXT = 0;
+
+      OldDocWord.SETRANGE("Document No.",OldDocument."No.");
+      IF OldDocWord.FINDSET THEN
+        REPEAT
+          NewDocWord.CHANGECOMPANY(NewCompName);
+          NewDocWord := OldDocWord;
+          NewDocWord."Document No." := NewDocument."No.";
+          NewDocWord.INSERT;
+        UNTIL OldDocWord.NEXT = 0;
+
+      OldDocCmtLine.SETRANGE("Table ID",DATABASE::"DC Document");
+      OldDocCmtLine.SETRANGE("No.",OldDocument."No.");
+      IF OldDocCmtLine.FINDSET THEN
+        REPEAT
+          NewDocCmtLine.CHANGECOMPANY(NewCompName);
+          NewDocCmtLine := OldDocCmtLine;
+          NewDocCmtLine."No." := NewDocument."No.";
+          NewDocCmtLine.INSERT;
+        UNTIL OldDocCmtLine.NEXT = 0;
+
+      NewDocument.SetDCSetup(NewSetup);
+
+      IF CopyFiles(OldDocument,NewDocument,NewDocCat) THEN BEGIN
+        OldDocument.SuspendDeleteCheck(TRUE);
+        OldDocument.DELETE(TRUE);
+      END ELSE
+        ERROR(Text010,OldDocument."No.",NewCompName);
+
+      COMMIT;
+    END;
+
+    PROCEDURE MoveUICDocuments@1160040012(VAR Document@1160040002 : Record 6085590);
+    VAR
+      DCSetup@1160040004 : Record 6085573;
+    BEGIN
+      DCSetup.GET;
+
+      IF Document.FINDSET THEN
+        REPEAT
+          Document.TESTFIELD(Status,Document.Status::Open);
+          MoveDocToUICDoc(Document);
+        UNTIL Document.NEXT = 0;
+    END;
+
+    PROCEDURE MoveDocToUICDoc@1160040003(Document@1160040000 : Record 6085590) : Boolean;
+    VAR
+      DocCat@1160040006 : Record 6085575;
+      DocumentPage@1160040001 : Record 6085591;
+      DocumentWord@1160040002 : Record 6085592;
+      DocumentUIC@1160040005 : Record 6085601;
+      DocumentPageUIC@1160040004 : Record 6085602;
+      DocumentWordUIC@1160040003 : Record 6085603;
+      DocCmtLine@1160040009 : Record 6085577;
+      DocCmtLineUIC@1160040008 : Record 6085604;
+      EmptyGuid@1160040007 : GUID;
+    BEGIN
+      Document.TESTFIELD(Status,Document.Status::Open);
+
+      DocCat.GET(Document."Document Category Code");
+
+      DocumentUIC.TRANSFERFIELDS(Document,TRUE);
+      DocumentUIC.INSERT(TRUE);
+
+      DocumentPage.SETRANGE("Document No.",Document."No.");
+      IF DocumentPage.FINDSET THEN
+        REPEAT
+          DocumentPageUIC.TRANSFERFIELDS(DocumentPage,TRUE);
+          DocumentPageUIC."Document Code" := DocumentUIC.Code;
+          DocumentPageUIC."Page No." := DocumentPage."Page No.";
+          DocumentPageUIC.INSERT;
+        UNTIL DocumentPage.NEXT = 0;
+
+      DocumentWord.SETRANGE("Document No.",Document."No.");
+      IF DocumentWord.FINDSET THEN
+        REPEAT
+          DocumentWordUIC.TRANSFERFIELDS(DocumentWord,TRUE);
+          DocumentWordUIC."Document Code" := DocumentUIC.Code;
+          DocumentWordUIC."Page No." := DocumentWord."Page No.";
+          DocumentWordUIC."Entry No." := DocumentWord."Entry No.";
+          DocumentWordUIC.INSERT;
+        UNTIL DocumentWord.NEXT = 0;
+
+      DocCmtLine.SETRANGE("Table ID",DATABASE::"DC Document");
+      DocCmtLine.SETRANGE("No.",Document."No.");
+      IF DocCmtLine.FINDSET THEN
+        REPEAT
+          DocCmtLineUIC.TRANSFERFIELDS(DocCmtLine,TRUE);
+          DocCmtLineUIC."Table ID" := DATABASE::"DC Document (UIC)";
+          DocCmtLineUIC."No." := DocumentUIC.Code;
+          DocCmtLineUIC.INSERT;
+        UNTIL DocCmtLine.NEXT = 0;
+
+      IF CopyCompanyFilesToUIC(Document,DocumentUIC,DocCat) THEN BEGIN
+        Document.SuspendDeleteCheck(TRUE);
+        Document.DELETE(TRUE);
+      END ELSE
+        ERROR(Text010,Document."No.",DocumentUIC.TABLECAPTION);
+
+      COMMIT;
+    END;
+
+    PROCEDURE MoveUICDocsToCompanies@1160040008(VAR DocumentUIC@1160040000 : Record 6085601);
+    BEGIN
+      IF DocumentUIC.FINDSET THEN
+        REPEAT
+          IF DocumentUIC."Move To Company" <> '' THEN
+            MoveUICDocToDoc(DocumentUIC,DocumentUIC."Move To Company");
+        UNTIL DocumentUIC.NEXT = 0;
+    END;
+
+    PROCEDURE MoveUICDocToDoc@1160040006(DocumentUIC@1160040000 : Record 6085601;NewCompName@1160040006 : Text[50]) : Boolean;
+    VAR
+      DCSetup@1160040009 : Record 6085573;
+      DocCat@1160040007 : Record 6085575;
+      NewDocument@1160040005 : Record 6085590;
+      NewDocumentPage@1160040001 : Record 6085591;
+      NewDocumentWord@1160040002 : Record 6085592;
+      NewDocCmtLine@1160040013 : Record 6085577;
+      DocumentPageUIC@1160040004 : Record 6085602;
+      DocumentWordUIC@1160040003 : Record 6085603;
+      DocCmtLineUIC@1160040012 : Record 6085604;
+      DocumentImporter@1160040011 : Codeunit 6085577;
+      CaptureEngine@1160040008 : Codeunit 6085575;
+      EmptyGuid@1160040010 : GUID;
+    BEGIN
+      DCSetup.CHANGECOMPANY(NewCompName);
+      DCSetup.GET;
+
+      IF DCSetup."Document Nos." = '' THEN
+        ERROR(Text003,DCSetup.FIELDCAPTION("Document Nos."),DCSetup.TABLECAPTION,NewCompName);
+      IF DCSetup."Archive File Path" = '' THEN
+        ERROR(Text003,DCSetup.FIELDCAPTION("Archive File Path"),DCSetup.TABLECAPTION,NewCompName);
+
+      DocCat.CHANGECOMPANY(NewCompName);
+      DocCat.GET(DocumentUIC."Document Category Code");
+
+      IF (DocCat."Archive E-mails on Document") AND (DCSetup."Archive File Path" = '') THEN
+        ERROR(Text003,DCSetup.FIELDCAPTION("Archive File Path"),DCSetup.TABLECAPTION,NewCompName);
+
+      NewDocument.SetCurrentCompany(NewCompName);
+      NewDocument.TRANSFERFIELDS(DocumentUIC,TRUE);
+      NewDocument."No." := GetNextDocNo(DCSetup,NewCompName);
+      NewDocument."Source Record ID Tree ID" := 0;
+      NewDocument."Source Record Table ID" := 0;
+      NewDocument."Source Record No." := '';
+      NewDocument."Source Record Name" := '';
+      NewDocument."Template No." := '';
+      NewDocument.INSERT(TRUE);
+
+      NewDocument."Imported by" := DocumentUIC."Imported by";
+      NewDocument."Imported Date-Time" := DocumentUIC."Imported Date-Time";
+      NewDocument."Import Day" := DocumentUIC."Import Day";
+      NewDocument."Import Month" := DocumentUIC."Import Month";
+      NewDocument."Import Year" := DocumentUIC."Import Year";
+      NewDocument.MODIFY;
+
+      DocumentPageUIC.SETRANGE("Document Code",DocumentUIC.Code);
+      IF DocumentPageUIC.FINDSET THEN
+        REPEAT
+          NewDocumentPage.CHANGECOMPANY(NewCompName);
+          NewDocumentPage.TRANSFERFIELDS(DocumentPageUIC,TRUE);
+          NewDocumentPage."Document No." := NewDocument."No.";
+          NewDocumentPage.INSERT;
+        UNTIL DocumentPageUIC.NEXT = 0;
+
+      DocumentWordUIC.SETRANGE("Document Code",DocumentUIC.Code);
+      IF DocumentWordUIC.FINDSET THEN
+        REPEAT
+          NewDocumentWord.CHANGECOMPANY(NewCompName);
+          NewDocumentWord.TRANSFERFIELDS(DocumentWordUIC,TRUE);
+          NewDocumentWord."Document No." := NewDocument."No.";
+          NewDocumentWord.INSERT;
+        UNTIL DocumentWordUIC.NEXT = 0;
+
+      DocCmtLineUIC.SETRANGE("Table ID",DATABASE::"DC Document (UIC)");
+      DocCmtLineUIC.SETRANGE("No.",DocumentUIC.Code);
+      IF DocCmtLineUIC.FINDSET THEN
+        REPEAT
+          NewDocCmtLine.CHANGECOMPANY(NewCompName);
+          NewDocCmtLine.TRANSFERFIELDS(DocCmtLineUIC,TRUE);
+          NewDocCmtLine."Table ID" := DATABASE::"DC Document";
+          NewDocCmtLine."No." := NewDocument."No.";
+          NewDocCmtLine.INSERT;
+        UNTIL DocCmtLineUIC.NEXT = 0;
+
+      NewDocument.SetDCSetup(DCSetup);
+
+      IF CopyUICFilesToCompany(DocumentUIC,NewDocument,DocCat) THEN
+        DocumentUIC.DELETE(TRUE)
+      ELSE
+        ERROR(Text010,DocumentUIC.Code,NewCompName);
+
+      COMMIT;
+
+      IF NewCompName = COMPANYNAME THEN BEGIN
+        IF DocCat."Process New Files Automatic" THEN
+          CaptureEngine.CaptureDocument(NewDocument);
+
+        IF DocCat."Register Documents Automatic." THEN
+          IF NewDocument.FIND('=') THEN BEGIN
+            NewDocument."Batch Register" := TRUE;
+            NewDocument.RegisterHideErrors;
+          END;
+        END;
+    END;
+
+    LOCAL PROCEDURE GetNextDocNo@12(NewSetup@1160040000 : Record 6085573;NewCompName@1160040001 : Text[30]) : Code[20];
+    VAR
+      NoSeries@1160040002 : Record 308;
+      NoSeriesLine@1160040004 : Record 309;
+      NoSeriesRelationship@1160040003 : Record 310;
+    BEGIN
+      NoSeriesRelationship.CHANGECOMPANY(NewCompName);
+      NoSeriesRelationship.SETRANGE(Code,NewSetup."Document Nos.");
+      IF NOT NoSeriesRelationship.ISEMPTY THEN
+        ERROR(Text004,NoSeriesRelationship.TABLECAPTION,NewSetup.FIELDCAPTION("Document Nos."));
+
+      NoSeries.CHANGECOMPANY(NewCompName);
+      NoSeries.GET(NewSetup."Document Nos.");
+      NoSeries.TESTFIELD("Default Nos.",TRUE);
+
+      NoSeriesLine.CHANGECOMPANY(NewCompName);
+      NoSeriesLine.LOCKTABLE;
+      NoSeriesLine.SETCURRENTKEY("Series Code","Starting Date");
+      NoSeriesLine.SETRANGE("Series Code",NewSetup."Document Nos.");
+      NoSeriesLine.SETRANGE("Starting Date",0D,WORKDATE);
+      NoSeriesLine.SETRANGE(Open,TRUE);
+      NoSeriesLine.FINDLAST;
+
+      NoSeriesLine."Last Date Used" := WORKDATE;
+
+      IF NoSeriesLine."Last No. Used" = '' THEN BEGIN
+        NoSeriesLine.TESTFIELD("Starting No.");
+        NoSeriesLine."Last No. Used" := NoSeriesLine."Starting No.";
+      END ELSE
+        IF NoSeriesLine."Increment-by No." <= 1 THEN
+          NoSeriesLine."Last No. Used" := INCSTR(NoSeriesLine."Last No. Used")
+        ELSE
+          IncrementNoText(NoSeriesLine."Last No. Used",NoSeriesLine."Increment-by No.");
+      IF (NoSeriesLine."Ending No." <> '') AND
+         (NoSeriesLine."Last No. Used" > NoSeriesLine."Ending No.")
+      THEN
+        ERROR(Text001,NoSeriesLine."Ending No.",NewSetup."Document Nos.");
+
+      NoSeriesLine.VALIDATE(Open);
+      NoSeriesLine.MODIFY;
+
+      EXIT(NoSeriesLine."Last No. Used");
+    END;
+
+    LOCAL PROCEDURE IncrementNoText@20(VAR No@1000 : Code[20];IncrementByNo@1001 : Decimal);
+    VAR
+      DecimalNo@1002 : Decimal;
+      StartPos@1003 : Integer;
+      EndPos@1004 : Integer;
+      NewNo@1005 : Text[30];
+    BEGIN
+      GetIntegerPos(No,StartPos,EndPos);
+      EVALUATE(DecimalNo,COPYSTR(No,StartPos,EndPos - StartPos + 1));
+      NewNo := FORMAT(DecimalNo + IncrementByNo,0,1);
+      ReplaceNoText(No,NewNo,0,StartPos,EndPos);
+    END;
+
+    LOCAL PROCEDURE ReplaceNoText@7(VAR No@1000 : Code[20];NewNo@1001 : Code[20];FixedLength@1002 : Integer;StartPos@1003 : Integer;EndPos@1004 : Integer);
+    VAR
+      StartNo@1005 : Code[20];
+      EndNo@1006 : Code[20];
+      ZeroNo@1007 : Code[20];
+      NewLength@1008 : Integer;
+      OldLength@1009 : Integer;
+    BEGIN
+      IF StartPos > 1 THEN
+        StartNo := COPYSTR(No,1,StartPos - 1);
+      IF EndPos < STRLEN(No) THEN
+        EndNo := COPYSTR(No,EndPos + 1);
+      NewLength := STRLEN(NewNo);
+      OldLength := EndPos - StartPos + 1;
+      IF FixedLength > OldLength THEN
+        OldLength := FixedLength;
+      IF OldLength > NewLength THEN
+        ZeroNo := PADSTR('',OldLength - NewLength,'0');
+      IF STRLEN(StartNo) + STRLEN(ZeroNo) + STRLEN(NewNo) + STRLEN(EndNo)  > 20 THEN
+        ERROR(Text002,No);
+      No := StartNo + ZeroNo + NewNo + EndNo;
+    END;
+
+    LOCAL PROCEDURE GetIntegerPos@4(No@1000 : Code[20];VAR StartPos@1001 : Integer;VAR EndPos@1002 : Integer);
+    VAR
+      IsDigit@1003 : Boolean;
+      i@1004 : Integer;
+    BEGIN
+      StartPos := 0;
+      EndPos := 0;
+      IF No <> '' THEN BEGIN
+        i := STRLEN(No);
+        REPEAT
+          IsDigit := No[i] IN ['0'..'9'];
+          IF IsDigit THEN BEGIN
+            IF EndPos = 0 THEN
+              EndPos := i;
+            StartPos := i;
+          END;
+          i := i - 1;
+        UNTIL (i = 0) OR (StartPos <> 0) AND NOT IsDigit;
+      END;
+    END;
+
+    PROCEDURE CopyFiles@1160040018(VAR OldDocument@1160040001 : Record 6085590;VAR NewDocument@1160040000 : Record 6085590;DocCat@1160040002 : Record 6085575) Succes : Boolean;
+    VAR
+      EmptyGuid@1160040003 : GUID;
+    BEGIN
+      Succes := NewDocument.SetTiffFile(OldDocument.GetTiffServerFileName) AND
+        NewDocument.SetPdfFile(OldDocument.GetPdfServerFileName);
+
+      IF Succes THEN
+        IF (DocCat."Archive E-mails on Document") AND (OldDocument."E-Mail GUID" <> EmptyGuid) THEN
+          IF NOT NewDocument.SetEmailFile(OldDocument.GetEMailServerFileName) THEN
+            EXIT(FALSE);
+    END;
+
+    PROCEDURE CopyUICFilesToCompany@1160040016(VAR DocumentUIC@1160040000 : Record 6085601;VAR NewDocument@1160040001 : Record 6085590;DocCat@1160040002 : Record 6085575) Succes : Boolean;
+    VAR
+      EmptyGuid@1160040003 : GUID;
+    BEGIN
+      Succes := NewDocument.SetTiffFile(DocumentUIC.GetTiffServerFileName) AND
+        NewDocument.SetPdfFile(DocumentUIC.GetPdfServerFileName);
+
+      IF Succes THEN
+        IF (DocCat."Archive E-mails on Document") AND (DocumentUIC."E-Mail GUID" <> EmptyGuid) THEN
+          IF NOT NewDocument.SetEmailFile(DocumentUIC.GetEMailServerFileName) THEN
+            EXIT(FALSE);
+    END;
+
+    PROCEDURE CopyCompanyFilesToUIC@1160040017(VAR Document@1160040001 : Record 6085590;VAR NewDocumentUIC@1160040002 : Record 6085601;DocCat@1160040000 : Record 6085575) Succes : Boolean;
+    VAR
+      EmptyGuid@1160040003 : GUID;
+    BEGIN
+      Succes := NewDocumentUIC.SetTiffFile(Document.GetTiffServerFileName) AND
+        NewDocumentUIC.SetPdfFile(Document.GetPdfServerFileName);
+
+      IF Succes THEN
+        IF (DocCat."Archive E-mails on Document") AND (Document."E-Mail GUID" <> EmptyGuid) THEN
+          IF NOT NewDocumentUIC.SetEmailFile(NewDocumentUIC.GetEMailServerFileName) THEN
+            EXIT(FALSE);
+    END;
+
+    BEGIN
+    END.
+  }
+}
+
