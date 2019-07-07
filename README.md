@@ -1,7 +1,9 @@
 ## Welcome to my Continia Document Capture Github repository
 
-You can use the [editor on GitHub](https://github.com/sradloff/Document-Capture/edit/master/README.md) to maintain and preview the content for your website in Markdown files.
+This repository contains usefull extensions/customizations for the add-on Continia Document Capture, which is a solution for scanning and processing of invoices and other documents directly from Microsoft Dynamics 365 Business Central / Microsoft Dynamics NAV.
 
-Whenever you commit to this repository, GitHub Pages will run [Jekyll](https://jekyllrb.com/) to rebuild the pages in your site, from the content in your Markdown files.
+The initial development was done by CKL Software GmbH (CKL) and the code will be maintained by CKL unregularly based on experiences made in projects.
 
+Please note! This is not an official module / add-on and therefor CKL Software does not offer support for implementation, training or is responsible for errors in this module. You can use the CKL Advance Line Recognition on your own risk.
 
+If you find issues in the code, please report these in the issues list here on Github.
