@@ -14,6 +14,7 @@ Download the code from Github and check if it need to be merged against you exis
 
 Open the Template Card of the template, where you want to use this modification.
 If you haven't renumbered/renamed this code you can now insert the Codeunit 61100 (CDC Adv. Find All PO Numbers) in the Field "After Capture":
+![Change "After Capture" codeunit on template card](https://github.com/sradloff/Document-Capture/blob/master/Find%20PO%20numbers%20in%20Document%20for%20order%20matching/Documentation/Template-Card-Codeunits.png?raw=true)
 
 ## Remark ##
 You can use this code as it is, without any warranty or support by me, [Continia Software](https://www.continia.com "Continia Software") or [CKL Software](https://www.ckl-kore.de "CKL Software - Add-ons for Microsoft Dynamics Business Central and NAV").
