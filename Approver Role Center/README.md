@@ -7,8 +7,9 @@ When it comes down to approvals it's common that users are getting involved, tha
 You can use this example to provide a Role Center that can be used without any training, as it has only limited informations and actions.
 
 ### Role Center ###
-
+![Simplified Role Center for Approvers or Limited Users](https://github.com/sradloff/Document-Capture/blob/master/Approver%20Role%20Center/Documentation/RoleCenter.png?raw=true)
 ### Approval Entries ###
+![Approvale Entries used for approval](https://github.com/sradloff/Document-Capture/blob/master/Approver%20Role%20Center/Documentation/ApprovalEntries.png?raw=true)
 
 ## How to use ##
 1. Download the code from Github and check if it need to be merged against you existing code in your database.
