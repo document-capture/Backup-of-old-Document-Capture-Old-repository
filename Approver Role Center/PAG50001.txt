@@ -1,0 +1,114 @@
+OBJECT Page 50001 CDC Web Approval Activities
+{
+  OBJECT-PROPERTIES
+  {
+    Date=24.07.19;
+    Time=12:00:00;
+    Version List=CDCADV14.00;
+  }
+  PROPERTIES
+  {
+    CaptionML=[DEU=Document Capture AktivitÑten;
+               ENU=Document Capture Activities];
+    SourceTable=Table6085585;
+    PageType=CardPart;
+    OnOpenPage=VAR
+                 TempApprovalEntries@1000000000 : TEMPORARY Record 454;
+                 DCApprovalMgmt@1000000001 : Codeunit 6085722;
+               BEGIN
+                 RESET;
+                 IF NOT GET THEN BEGIN
+                   INIT;
+                   INSERT;
+                 END;
+
+                 SETRANGE("Date Filter",0D,TODAY);
+
+                 DCApprovalMgmt.BuildApprovalEntriesForUser(TempApprovalEntries,FORMAT(DATABASE::"Purchase Header"),TRUE,FALSE);
+
+                 TempApprovalEntries.SETFILTER("Entry No.",'>0');
+                 MyPIsForApproval := TempApprovalEntries.COUNT;
+               END;
+
+    OnAfterGetRecord=VAR
+                       DocCat@1160040000 : Record 6085575;
+                     BEGIN
+                     END;
+
+    ActionList=ACTIONS
+    {
+      { 1000000003;  ;ActionContainer;
+                      ActionContainerType=ActionItems }
+      { 1000000004;1 ;Action    ;
+                      CaptionML=[DEU=Demo &ZurÅcksetzen;
+                                 ENU=Reset Demo];
+                      Promoted=Yes;
+                      PromotedIsBig=Yes;
+                      Image=ResetStatus;
+                      PromotedCategory=Process;
+                      OnAction=BEGIN
+                                 CODEUNIT.RUN(50000);
+                                 CurrPage.UPDATE(TRUE);
+                               END;
+                                }
+      { 1000000005;1 ;Action    ;
+                      Name=Test Internet;
+                      RunObject=Codeunit 50009 }
+    }
+  }
+  CONTROLS
+  {
+    { 1900000001;0;Container;
+                ContainerType=ContentArea }
+
+    { 1000000002;1;Group  ;
+                CaptionML=[DEU=Beleg verarbeiten;
+                           ENU=Document Processing];
+                GroupType=CueGroup;
+                ActionList=ACTIONS
+                {
+                  { 1000000000;  ;Action    ;
+                                  Name=<Action1>;
+                                  CaptionML=[DEU=Belege scannen;
+                                             ENU=Scan Documents];
+                                  RunObject=Page 6085577 }
+                  { 1000000001;  ;Action    ;
+                                  Name=<Action3>;
+                                  CaptionML=[DEU=Dateien importieren;
+                                             ENU=Import Files];
+                                  RunObject=Codeunit 6085577;
+                                  RunPageMode=Create }
+                  { 1000000006;  ;Action    ;
+                                  Name=<Action1000000002>;
+                                  CaptionML=[DEU=Beleg suchen;
+                                             ENU=Document Search];
+                                  OnAction=BEGIN
+                                             PAGE.RUN(PAGE::"CDC Document Search");
+                                           END;
+                                            }
+                }
+                 }
+
+    { 1000000007;2;Field  ;
+                Name=<Control1000000002>;
+                CaptionML=DEU=Meine Rechnungen;
+                SourceExpr=MyPIsForApproval;
+                OnDrillDown=BEGIN
+                              PAGE.RUN(PAGE::"CDC Purch. Approval Entries");
+                            END;
+                             }
+
+  }
+  CODE
+  {
+    VAR
+      PurchHeader@161024012 : Record 38;
+      FilesForOCR@1160040000 : Integer;
+      FilesForImport@1160040001 : Integer;
+      MyPIsForApproval@1000000000 : Integer INDATASET;
+
+    BEGIN
+    END.
+  }
+}
+

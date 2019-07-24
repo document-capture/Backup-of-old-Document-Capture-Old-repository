@@ -1,0 +1,43 @@
+OBJECT Page 50000 CDC Limited User Role Center
+{
+  OBJECT-PROPERTIES
+  {
+    Date=24.07.19;
+    Time=12:00:00;
+    Version List=CDCADV14.00;
+  }
+  PROPERTIES
+  {
+    CaptionML=[DEU=Rollencenter;
+               ENU=Role Center];
+    PageType=RoleCenter;
+    ActionList=ACTIONS
+    {
+      { 1900000011;0 ;ActionContainer;
+                      ActionContainerType=HomeItems }
+      { 1000000012;1 ;Action    ;
+                      CaptionML=[DEU=Genehmigungsposten;
+                                 ENU=Approval Entries];
+                      RunObject=Page 6085710 }
+    }
+  }
+  CONTROLS
+  {
+    { 1900000008;0;Container;
+                ContainerType=RoleCenterArea }
+
+    { 1900724808;1;Group   }
+
+    { 1902304208;2;Part   ;
+                PagePartID=Page50001;
+                PartType=Page }
+
+  }
+  CODE
+  {
+
+    BEGIN
+    END.
+  }
+}
+
