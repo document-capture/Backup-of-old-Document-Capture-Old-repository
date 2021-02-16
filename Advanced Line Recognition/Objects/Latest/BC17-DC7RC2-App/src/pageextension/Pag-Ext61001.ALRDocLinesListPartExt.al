@@ -79,8 +79,9 @@ pageextension 61001 "ALR Doc Lines ListPart Ext." extends "CDC Document Lines Li
                     trigger OnAction()
                     var
                         AdvLineRecognitionMgt: Codeunit "Adv. Line Recognition Mgt.";
+                        YouAreUsingALRVersion: Label 'You are using version %1 of the advanced line recognition.';
                     begin
-                        AdvLineRecognitionMgt.ShowVersionNo;
+                        Message(YouAreUsingALRVersion, AdvLineRecognitionMgt.ShowVersionNo);
                     end;
                 }
             }

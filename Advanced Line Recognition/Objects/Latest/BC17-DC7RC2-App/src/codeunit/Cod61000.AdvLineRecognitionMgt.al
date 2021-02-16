@@ -22,7 +22,6 @@ codeunit 61000 "Adv. Line Recognition Mgt."
         NoRequiredFieldFound: Label 'No mandatory field with the option "Required" was found in line %1! Configure a mandatory field first.';
         ALRVersionNoText: Label 'ALR%1 (%2 Build %3)';
         NoALRFieldsForReset: Label 'There are not fields configured for advanced line recognition, that can be reset.';
-        YouAreUsingALRVersion: Label 'You are using version %1 of the advanced line recognition.', Comment = 'Displays the current version of the Advanced line recognition to the user including the build';
 
     procedure SetToAnchorLinkedField(var TempDocumentLine: Record "CDC Temp. Document Line")
     var
@@ -326,9 +325,11 @@ codeunit 61000 "Adv. Line Recognition Mgt."
         ApplicationVersion: Text;
         ApplicationBuild: Text;
     begin
+        //EXIT(12) //=> for older NAV/BC Versions without the version triggers
         VersionTriggers.GetApplicationVersion(ApplicationVersion);
         VersionTriggers.GetApplicationBuild(ApplicationBuild);
-        Message(YouAreUsingALRVersion, StrSubstNo(ALRVersionNoText, '13', ApplicationVersion, ApplicationBuild));
+
+        exit(StrSubstNo(ALRVersionNoText, '13', ApplicationVersion, ApplicationBuild));
     end;
 }
 
