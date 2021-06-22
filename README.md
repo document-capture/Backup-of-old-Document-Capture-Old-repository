@@ -1,5 +1,3 @@
-## Welcome to my Continia Document Capture Github projects page
-
 ##Please not the new repository structure##
 
 I created new repositories in a new github organization:
