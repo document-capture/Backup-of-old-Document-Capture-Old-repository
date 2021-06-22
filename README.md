@@ -1,8 +1,8 @@
-##Please not the new repository structure##
+# Please not the new repository structure #
 
-I created new repositories in a new github organization:
+### I created new repositories in a new github organization ###
 
-You can find
+You can find the repositories/code here:
 
 * Advanced Line Recognition: [https://github.com/document-capture/Advanced-Line-Recognition](https://github.com/document-capture/Advanced-Line-Recognition "Advanced Line Recognition repository")
 * Swiss QR Code solution [https://github.com/document-capture/Swiss-QR-Code-integration](https://github.com/document-capture/Swiss-QR-Code-integration "Swiss QR code repository")
